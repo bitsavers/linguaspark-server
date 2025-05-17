@@ -1,6 +1,6 @@
-FROM ghcr.io/linguaspark/server:main
+FROM quay.io/bitsaver/linguaspark:latest
 
-COPY ./models-enzh /app/models
+COPY ./translation-models /app/models
 
 ENV MODELS_DIR=/app/models
 ENV NUM_WORKERS=1

@@ -9,6 +9,7 @@ RUN mkdir -p /app/lib && \
     find /app/target/release/build -name "linguaspark-*" -type d | xargs -I {} find {} -path "*/out/*.so" -type f | xargs -I {} cp {} /app/lib/ && \
     ls -l /app/lib
 
+
 FROM debian:bookworm-slim
 
 WORKDIR /app
