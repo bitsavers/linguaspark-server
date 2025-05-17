@@ -1,5 +1,0 @@
-branch:
-  - buttons:
-      - name: Update
-        description: Update Docker Images
-        event: web_trigger_update
