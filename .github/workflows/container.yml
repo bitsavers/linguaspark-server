@@ -1,0 +1,164 @@
+name: Build and publish Container images
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_date:
+        description: 'Build date (e.g. 20250515)'
+        required: true
+
+env:
+  REGISTRY: 'quay.io'
+  IMAGE_NAME: 'bitsaver/linguaspark'
+
+jobs:
+  base_image:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Quay.io Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.QUAY_BS_USERNAME }}
+          password: ${{ secrets.QUAY_BS_ROBOT_TOKEN }}
+
+      - name: Build and push Container image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile
+          platforms: 'linux/amd64'
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.build_date }}
+        env:
+          DOCKER_BUILD_SUMMARY: false
+          DOCKER_BUILD_RECORD_UPLOAD: false
+
+      - name: Sleep
+        run: sleep 5
+
+  with_models_image:
+    needs: [ 'base_image' ]
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        config:
+          - {
+              symbol: 'combo-a1',
+              translation_models: 'enzh'
+            }
+          - {
+              symbol: 'combo-a2',
+              translation_models: 'enzh;fren'
+            }
+          - {
+              symbol: 'combo-a3',
+              translation_models: 'enzh;deen'
+            }
+          - {
+              symbol: 'combo-a4',
+              translation_models: 'enzh;esen'
+            }
+          - {
+              symbol: 'combo-a5',
+              translation_models: 'enzh;ruen'
+            }
+          - {
+              symbol: 'combo-a6',
+              translation_models: 'enzh;jaen'
+            }
+          - {
+              symbol: 'combo-a7',
+              translation_models: 'enzh;koen'
+            }
+          - {
+              symbol: 'combo-b1',
+              translation_models: 'enzh;zhen'
+            }
+          - {
+              symbol: 'combo-b2',
+              translation_models: 'enzh;jaen;koen;zhen;enja;enko'
+            }
+          - {
+              symbol: 'combo-b3',
+              translation_models: 'enzh;zhen;fren;enfr;deen;ende;enes;esen;enru;ruen'
+            }
+          - {
+              symbol: 'combo-b4',
+              translation_models: 'enzh;zhen;jaen;enja;koen;enko;fren;enfr;deen;ende;enes;esen'
+            }
+          - {
+              symbol: 'combo-b5',
+              translation_models: 'enzh;zhen;jaen;enja;koen;enko;fren;enfr;deen;ende;enes;esen;enru;ruen'
+            }
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to Quay.io Container Registry
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.QUAY_BS_USERNAME }}
+          password: ${{ secrets.QUAY_BS_ROBOT_TOKEN }}
+
+      - name: Download translation models
+        shell: bash
+        run: |
+          mkdir translation-models
+          TRANSLATION_MODELS="${{ matrix.config.translation_models }}"
+          IFS=';' read -r -a models <<< "$TRANSLATION_MODELS"
+          curl -sL https://github.com/mozilla/firefox-translations-models/raw/refs/heads/main/registry.json > "registry.json"
+
+          files=(model lex vocab trgvocab srcvocab)
+          for model in "${models[@]}"; do
+              mkdir -p "translation-models/$model"
+              for file_type in "${files[@]}"; do
+                  file_name=$(jq -r ".$model.$file_type.name" registry.json)
+                  if [ -n "$file_name" ] && [ "$file_name" != "null" ]; then
+                      echo "Downloading $file_name for $model"
+                      download_url="https://github.com/mozilla/firefox-translations-models/raw/refs/heads/main/models/prod/$model/${file_name}.gz"
+                      curl -L -s "$download_url" -o "translation-models/$model/${file_name}.gz"
+                      gunzip -f "translation-models/$model/${file_name}.gz"
+                      echo "$file_name downloaded and extracted to translation-models/$model/$file_name"
+                  else
+                      echo "Failed to find $file_type for $model in registry.json"
+                  fi
+              done
+          done
+
+
+      - name: Build and push Container image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./Dockerfile.models
+          platforms: 'linux/amd64'
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest-${{ matrix.config.symbol }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ github.event.inputs.build_date }}-${{ matrix.config.symbol }}
+        env:
+          DOCKER_BUILD_SUMMARY: false
+          DOCKER_BUILD_RECORD_UPLOAD: false
+
