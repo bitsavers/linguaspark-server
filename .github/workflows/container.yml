@@ -128,23 +128,61 @@ jobs:
           mkdir translation-models
           TRANSLATION_MODELS="${{ matrix.config.translation_models }}"
           IFS=';' read -r -a models <<< "$TRANSLATION_MODELS"
-          curl -sL https://github.com/mozilla/firefox-translations-models/raw/refs/heads/main/registry.json > "registry.json"
 
-          files=(model lex vocab trgvocab srcvocab)
           for model in "${models[@]}"; do
-              mkdir -p "translation-models/$model"
-              for file_type in "${files[@]}"; do
-                  file_name=$(jq -r ".$model.$file_type.name" registry.json)
-                  if [ -n "$file_name" ] && [ "$file_name" != "null" ]; then
-                      echo "Downloading $file_name for $model"
-                      download_url="https://github.com/mozilla/firefox-translations-models/raw/refs/heads/main/models/prod/$model/${file_name}.gz"
-                      curl -L -s "$download_url" -o "translation-models/$model/${file_name}.gz"
-                      gunzip -f "translation-models/$model/${file_name}.gz"
-                      echo "$file_name downloaded and extracted to translation-models/$model/$file_name"
-                  else
-                      echo "Failed to find $file_type for $model in registry.json"
-                  fi
-              done
+            mkdir -p "translation-models/$model"
+            if [[ "$model" == "enzh" || "$model" == "enja" ]]; then
+              model_set="base"
+              files=(
+                "lex.50.50.${model}.s2t.bin.gz"
+                "model.${model}.intgemm.alphas.bin.gz"
+                "srcvocab.${model}.spm.gz"
+                "trgvocab.${model}.spm.gz"
+              )
+            elif [[ "$model" == "jaen" || "$model" == "koen" || "$model" == "zhen" || "$model" == "enko" || "$model" == "enru" ]]; then
+              model_set="base"
+              files=(
+                "lex.50.50.${model}.s2t.bin.gz"
+                "model.${model}.intgemm.alphas.bin.gz"
+                "vocab.${model}.spm.gz"
+              )
+            elif [[ "$model" == "fren" || "$model" == "deen" || "$model" == "esen" ]]; then
+              model_set="base-memory"
+              files=(
+                "lex.50.50.${model}.s2t.bin.gz"
+                "model.${model}.intgemm.alphas.bin.gz"
+                "vocab.${model}.spm.gz"
+              )
+            elif [[ "$model" == "ruen" || "$model" == "enfr" || "$model" == "ende" ]]; then
+              model_set="tiny"
+              files=(
+                "lex.50.50.${model}.s2t.bin.gz"
+                "model.${model}.intgemm.alphas.bin.gz"
+                "vocab.${model}.spm.gz"
+              )
+            elif [[ "$model" == "enes" ]]; then
+              model_set="tiny"
+              files=(
+                "lex.50.50.${model}.s2t.bin.gz"
+                "model.${model}.intgemm.alphas.bin.gz"
+                "qualityModel.${model}.bin.gz"
+                "vocab.${model}.spm.gz"
+              )
+            else
+              files=()
+            fi
+
+            base_url="https://github.com/mozilla/firefox-translations-models/raw/refs/heads/main/models/${model_set}/${model}"
+            for file in "${files[@]}"; do
+              echo "Downloading $file"
+              curl -sL "$base_url/$file" -o "translation-models/$model/$file"
+              gunzip -f "translation-models/$model/$file"
+              extracted_file="${file%.gz}"
+              echo "$extracted_file downloaded and extracted"
+            done
+            echo "Download completed. Model structure:"
+            pwd
+            ls -R "translation-models/$model"
           done
 
 
